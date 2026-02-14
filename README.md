@@ -58,7 +58,7 @@ This project uses the consolidated [TrailCurrentKiCADLibraries](https://github.c
 
 ```bash
 # Clone the library
-git clone https://github.com/trailcurrentoss/TrailCurrentKiCADLibraries.git
+git clone git@github.com:trailcurrentoss/TrailCurrentKiCADLibraries.git
 
 # Set environment variables (add to ~/.bashrc or ~/.zshrc)
 export TRAILCURRENT_SYMBOL_DIR="/path/to/TrailCurrentKiCADLibraries/symbols"
