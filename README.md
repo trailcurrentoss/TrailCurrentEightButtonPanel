@@ -106,10 +106,6 @@ This firmware depends on the following public libraries:
 
 All dependencies are automatically resolved by PlatformIO during the build process.
 
-**WiFi Credentials (for OTA updates):**
-- Copy `src/Secrets.h.template` to `src/Secrets.h` and fill in your WiFi credentials
-- Never commit `Secrets.h` to version control (it's in `.gitignore`)
-
 ### CAN Bus Protocol
 
 **Transmit (Panel to Bus):**
