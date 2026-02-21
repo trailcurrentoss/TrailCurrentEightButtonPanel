@@ -304,70 +304,6 @@ void send_brightness_message(int deviceIndex, uint8_t brightness) {
   }
 }
 
-// Jingle Bells startup light show - plays once on first-ever boot
-// Uses all 8 LEDs blinking to the rhythm of the chorus
-void playJingleBells() {
-  const int ledPins[] = {LED1_PIN, LED2_PIN, LED3_PIN, LED4_PIN,
-                         LED5_PIN, LED6_PIN, LED7_PIN, LED8_PIN};
-
-  // Set LEDs from bitmask: bit 0 = LED1, bit 7 = LED8
-  auto setLeds = [&](uint8_t mask) {
-    for (int i = 0; i < 8; i++) {
-      digitalWrite(ledPins[i], (mask & (1 << i)) ? HIGH : LOW);
-    }
-  };
-
-  // Jingle Bells chorus at ~150 BPM (quarter = 400ms)
-  // q=350+50gap, h=700+50gap, e=175+25gap, q.=525+50gap, w=1400+100gap
-  struct Note { uint8_t leds; uint16_t on; uint16_t gap; };
-  const Note melody[] = {
-    // "Jin-gle bells," (E E E-)
-    {0b00010001, 350, 50},   // q - LEDs 1,5
-    {0b00100010, 350, 50},   // q - LEDs 2,6
-    {0b11111111, 700, 50},   // h - ALL
-
-    // "jin-gle bells," (E E E-)
-    {0b01000100, 350, 50},   // q - LEDs 3,7
-    {0b10001000, 350, 50},   // q - LEDs 4,8
-    {0b11111111, 700, 50},   // h - ALL
-
-    // "jin-gle all the way" (E G C D E----)
-    {0b10000001, 350, 50},   // q - LEDs 1,8 (outside)
-    {0b01000010, 350, 50},   // q - LEDs 2,7
-    {0b00100100, 525, 50},   // q. - LEDs 3,6
-    {0b00011000, 175, 25},   // e - LEDs 4,5 (center)
-    {0b11111111, 1400, 100}, // w - ALL
-
-    // "Oh what fun it" (F F F. F)
-    {0b10000001, 350, 50},   // q - LEDs 1,8
-    {0b11000011, 350, 50},   // q - LEDs 1,2,7,8
-    {0b11100111, 525, 50},   // q. - LEDs 1,2,3,6,7,8
-    {0b11111111, 175, 25},   // e - ALL
-
-    // "is to ride in a" (F E E E)
-    {0b00011000, 350, 50},   // q - LEDs 4,5 (center)
-    {0b00111100, 350, 50},   // q - LEDs 3,4,5,6
-    {0b01111110, 175, 25},   // e - LEDs 2,3,4,5,6,7
-    {0b11111111, 175, 25},   // e - ALL
-
-    // "one horse o-pen sleigh!" (D D E D G----)
-    {0b01000010, 350, 50},   // q - LEDs 2,7
-    {0b10000001, 350, 50},   // q - LEDs 1,8
-    {0b11000011, 350, 50},   // q - LEDs 1,2,7,8
-    {0b01100110, 350, 50},   // q - LEDs 2,3,6,7
-    {0b11111111, 1400, 100}, // w - ALL (big finish!)
-  };
-
-  debugln("[LED] Playing Jingle Bells startup sequence");
-  for (int i = 0; i < (int)(sizeof(melody) / sizeof(melody[0])); i++) {
-    setLeds(melody[i].leds);
-    delay(melody[i].on);
-    setLeds(0);
-    delay(melody[i].gap);
-  }
-  debugln("[LED] Jingle Bells complete");
-}
-
 void setup() {
   Serial.begin(115200);
   delay(100);
@@ -396,17 +332,6 @@ void setup() {
   digitalWrite(LED8_PIN, LOW);
 
   debugln("[LED] All LEDs initialized to OFF");
-
-  // Play Jingle Bells light show on first-ever startup only
-  Preferences prefs;
-  prefs.begin("panel", false);
-  bool hasPlayedStartup = prefs.getBool("jbPlayed", false);
-  if (!hasPlayedStartup) {
-    playJingleBells();
-    prefs.putBool("jbPlayed", true);
-    debugln("[LED] First startup sequence flag saved to NVS");
-  }
-  prefs.end();
 
   // Initialize button pins (inputs with pullup)
   pinMode(BTN1_PIN, INPUT_PULLUP);
