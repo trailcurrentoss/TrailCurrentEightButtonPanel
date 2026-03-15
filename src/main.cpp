@@ -351,7 +351,7 @@ void setup() {
 
   // Initialize CAN bus
   // GPIO 15 = TX, GPIO 13 = RX, 500 kbps
-  if (!TwaiTaskBased::begin(GPIO_NUM_15, GPIO_NUM_13, 500000)) {
+  if (!TwaiTaskBased::begin(GPIO_NUM_15, GPIO_NUM_13, 500000, TWAI_MODE_NO_ACK)) {
     debugln("[CAN] ERROR: Failed to initialize CAN bus!");
     while (1) {  // Halt on CAN initialization failure
       delay(1000);
