@@ -1,5 +1,7 @@
 # TrailCurrent Tapper
 
+![TrailCurrent Tapper](DOCS/images/tapper_assembled.png)
+
 Eight-button control panel that sends device commands and brightness control over a CAN bus interface with OTA firmware update capability. Part of the [TrailCurrent](https://trailcurrent.com) open-source vehicle platform.
 
 ## Hardware Overview
