@@ -14,6 +14,7 @@ Eight-button control panel that sends device commands and brightness control ove
   - Long press (hold 700ms+): brightness adjustment (0-255)
   - CAN bus communication at 500 kbps
   - Over-the-air (OTA) firmware updates via WiFi
+  - mDNS-based network discovery
   - LED state feedback from CAN bus
   - FreeCAD enclosure design
 
@@ -82,31 +83,25 @@ See [KICAD_ENVIRONMENT_SETUP.md](https://github.com/trailcurrentoss/TrailCurrent
 
 ## Firmware
 
-See `src/` directory for PlatformIO-based firmware.
+ESP-IDF based firmware in the `main/` directory.
 
-**Setup:**
+**Prerequisites:**
+- [ESP-IDF](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/get-started/) v4.1 or later
+
+**Build and flash:**
 ```bash
-# Install PlatformIO (if not already installed)
-pip install platformio
+# Set up ESP-IDF environment
+. $IDF_PATH/export.sh
 
-# Build firmware
-pio run
+# Build
+idf.py build
 
-# Upload to board (serial)
-pio run -t upload
+# Flash via serial
+idf.py -p /dev/ttyUSB0 flash monitor
 
-# Upload via OTA (after initial flash)
-pio run -t upload --upload-port esp32-DEVICE_ID
+# OTA update (after initial flash, with WiFi credentials provisioned)
+curl -X POST http://esp32-XXYYZZ.local/ota --data-binary @build/tapper.bin
 ```
-
-### Firmware Dependencies
-
-This firmware depends on the following public libraries:
-
-- **[OtaUpdateLibraryWROOM32](https://github.com/trailcurrentoss/OtaUpdateLibraryWROOM32)** (v0.0.1) - Over-the-air firmware update functionality
-- **[TwaiTaskBasedLibraryWROOM32](https://github.com/trailcurrentoss/TwaiTaskBasedLibraryWROOM32)** (v0.0.1) - CAN bus communication interface
-
-All dependencies are automatically resolved by PlatformIO during the build process.
 
 ### CAN Bus Protocol
 
@@ -122,6 +117,8 @@ All dependencies are automatically resolved by PlatformIO during the build proce
 | CAN ID | Bytes | Description |
 |--------|-------|-------------|
 | 0x00 | 3 | OTA update trigger (MAC-based device targeting) |
+| 0x01 | var | WiFi credential provisioning (chunked protocol) |
+| 0x02 | 0 | Discovery trigger (broadcast) |
 | 0x1B | 8 | LED backlight state (1 byte per LED, 0=off, non-zero=on) |
 
 ### Button Behavior
@@ -129,6 +126,14 @@ All dependencies are automatically resolved by PlatformIO during the build proce
 - **Short press** (< 700ms): Sends toggle command on CAN ID 0x18
 - **Long hold** (>= 700ms): Enters brightness mode, incrementing brightness every 100ms and sending on CAN ID 0x15
 - **Release after hold**: Locks brightness at current value
+
+### OTA Updates
+
+WiFi credentials are provisioned over CAN (ID 0x01) and stored in NVS. When an OTA trigger (ID 0x00) matches this device's MAC-derived hostname, the module connects to WiFi, advertises via mDNS, and accepts firmware uploads at `POST /ota`.
+
+### Network Discovery
+
+On CAN trigger (ID 0x02), the module joins WiFi and advertises itself via mDNS service `_trailcurrent._tcp` with TXT records for module type, CAN ID, and firmware version.
 
 ## Manufacturing
 
@@ -145,16 +150,15 @@ All dependencies are automatically resolved by PlatformIO during the build proce
 │   ├── trailcurrent-tapper.kicad_pro
 │   ├── trailcurrent-tapper.kicad_sch
 │   └── trailcurrent-tapper.kicad_pcb
-├── src/                          # Firmware source
-│   ├── main.cpp                  # Button handling and CAN communication
-│   ├── globals.h                 # LED pin definitions
-│   ├── debug.h                   # Comprehensive debug macro system
-│   ├── canHelper.h               # CAN bus configuration
-│   └── Secrets.h.template        # WiFi credentials template
-├── ARCHITECTURE_CORRECTED.md     # Architecture documentation
-├── BUTTON_LED_FIX_SUMMARY.md     # Button/LED fix notes
-├── platformio.ini                # Build configuration
-└── partitions.csv                # ESP32 flash partition layout
+├── main/                         # ESP-IDF firmware source
+│   ├── main.c                    # Button handling, LED control, CAN communication
+│   ├── ota.c / ota.h             # OTA updates and WiFi provisioning
+│   ├── discovery.c / discovery.h # mDNS network discovery
+│   ├── CMakeLists.txt            # Component build configuration
+│   └── idf_component.yml         # Managed component dependencies
+├── CMakeLists.txt                # ESP-IDF project root
+├── sdkconfig.defaults            # Default SDK configuration
+└── partitions.csv                # ESP32 flash partition layout (dual OTA)
 ```
 
 ## License

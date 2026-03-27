@@ -10,9 +10,12 @@
 # KiCAD cache
 fp-info-cache
 
-# PlatformIO
-.pio/
-.platformio/
+# ESP-IDF
+build/
+sdkconfig
+sdkconfig.old
+managed_components/
+dependencies.lock
 
 # IDEs
 .vscode/
@@ -39,10 +42,9 @@ CLAUDE.MD
 .tabnine*
 .sourcery.yaml
 
-# CRITICAL: Secrets - never commit credentials
-src/Secrets.h
-src/secrets.h
+# Secrets
 secrets.h
+*.secrets
 *.zip
 
 # Temporary/backup files
