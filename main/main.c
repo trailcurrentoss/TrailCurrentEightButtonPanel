@@ -54,7 +54,6 @@ static const gpio_num_t LED_PINS[8] = {
 
 // CAN IDs
 #define CAN_ID_TOGGLE       0x18    // Button toggle command (TX)
-#define CAN_ID_BRIGHTNESS   0x15    // Brightness control (TX)
 #define CAN_ID_LED_STATE    0x1B    // LED state feedback (RX from Torrent)
 
 // =============================================================================
@@ -62,8 +61,6 @@ static const gpio_num_t LED_PINS[8] = {
 // =============================================================================
 
 #define DEBOUNCE_DELAY_US      (50 * 1000LL)    // 50ms debounce
-#define HOLD_THRESHOLD_US      (500 * 1000LL)   // 500ms to enter brightness mode
-#define BRIGHTNESS_INTERVAL_US (30 * 1000LL)    // Update brightness every 30ms (~7.5s full sweep)
 
 // =============================================================================
 // Button State
@@ -72,11 +69,7 @@ static const gpio_num_t LED_PINS[8] = {
 typedef struct {
     bool     pressed;
     bool     toggle_sent;
-    bool     in_brightness_mode;
-    bool     brightness_rising;    // true = ramping up, false = ramping down
-    uint8_t  brightness;
     int64_t  press_start_us;
-    int64_t  last_brightness_us;
 } button_state_t;
 
 static button_state_t s_buttons[NUM_BUTTONS] = {0};
@@ -133,16 +126,6 @@ static void send_toggle(int button_index)
     ESP_LOGI(TAG, "Button %d toggle sent", button_index + 1);
 }
 
-static void send_brightness(int device_index, uint8_t brightness)
-{
-    twai_message_t msg = {
-        .identifier = CAN_ID_BRIGHTNESS,
-        .data_length_code = 2,
-        .data = { device_index, brightness },
-    };
-    twai_transmit(&msg, 0);
-}
-
 // =============================================================================
 // LED State Handler (RX from Torrent on CAN ID 0x1B)
 // =============================================================================
@@ -174,63 +157,18 @@ static void button_scan(void)
 
         if (pin_low) {
             if (!btn->pressed) {
-                // Button just pressed
                 btn->pressed = true;
                 btn->press_start_us = now_us;
                 btn->toggle_sent = false;
-                btn->in_brightness_mode = false;
-            } else {
-                // Button held
-                int64_t hold_us = now_us - btn->press_start_us;
-
-                // Send toggle after debounce, before brightness threshold
-                if (!btn->toggle_sent && !btn->in_brightness_mode &&
-                    hold_us >= DEBOUNCE_DELAY_US && hold_us < HOLD_THRESHOLD_US) {
-                    btn->toggle_sent = true;
-                    send_toggle(i);
-                }
-
-                // Enter brightness mode after hold threshold
-                if (hold_us >= HOLD_THRESHOLD_US && !btn->in_brightness_mode) {
-                    btn->in_brightness_mode = true;
-                    btn->brightness = 0;
-                    btn->brightness_rising = true;
-                    btn->last_brightness_us = now_us;
-                    btn->toggle_sent = false;
-                    ESP_LOGI(TAG, "Button %d entering brightness mode", i + 1);
-                }
-
-                // Oscillate brightness while held: ramp up to 255, then back down to 0, repeat
-                if (btn->in_brightness_mode &&
-                    (now_us - btn->last_brightness_us) >= BRIGHTNESS_INTERVAL_US) {
-                    btn->last_brightness_us = now_us;
-                    if (btn->brightness_rising) {
-                        if (btn->brightness >= 255) {
-                            btn->brightness_rising = false;
-                            btn->brightness = 254;
-                        } else {
-                            btn->brightness++;
-                        }
-                    } else {
-                        if (btn->brightness == 0) {
-                            btn->brightness_rising = true;
-                            btn->brightness = 1;
-                        } else {
-                            btn->brightness--;
-                        }
-                    }
-                    send_brightness(i, btn->brightness);
-                }
+            } else if (!btn->toggle_sent &&
+                       (now_us - btn->press_start_us) >= DEBOUNCE_DELAY_US) {
+                btn->toggle_sent = true;
+                send_toggle(i);
             }
         } else {
             if (btn->pressed) {
-                // Button released
-                if (btn->in_brightness_mode) {
-                    ESP_LOGI(TAG, "Button %d brightness locked at %d", i + 1, btn->brightness);
-                }
                 btn->pressed = false;
                 btn->toggle_sent = false;
-                btn->in_brightness_mode = false;
             }
         }
     }
@@ -335,7 +273,7 @@ static void twai_task(void *arg)
         }
 
         // Tapper is input-only — no periodic status TX.
-        // Button presses are sent from the main task via send_toggle/send_brightness.
+        // Button presses are sent from the main task via send_toggle.
         (void)bus_off;
     }
 }
@@ -356,8 +294,8 @@ void app_main(void)
     // Initialize GPIO for buttons and LEDs
     gpio_init_all();
 
-    ESP_LOGI(TAG, "CAN toggle TX ID: 0x%02X, brightness TX ID: 0x%02X, LED state RX ID: 0x%02X",
-             CAN_ID_TOGGLE, CAN_ID_BRIGHTNESS, CAN_ID_LED_STATE);
+    ESP_LOGI(TAG, "CAN toggle TX ID: 0x%02X, LED state RX ID: 0x%02X",
+             CAN_ID_TOGGLE, CAN_ID_LED_STATE);
 
     // CAN runs in its own task so bus errors never block button scanning
     xTaskCreate(twai_task, "twai", 4096, NULL, 5, NULL);
