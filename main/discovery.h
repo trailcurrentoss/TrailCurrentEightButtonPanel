@@ -1,13 +1,14 @@
 #pragma once
 
 #include <stdint.h>
+#include <stdbool.h>
 
 // Discovery window duration (3 minutes)
 #define DISCOVERY_TIMEOUT_MS 180000
 
 /**
  * Initialize discovery subsystem.
- * Must be called after ota_init().
+ * Must be called after wifi_config_init().
  */
 void discovery_init(void);
 
@@ -18,3 +19,9 @@ void discovery_init(void);
  * for Headwaters to confirm registration.
  */
 void discovery_handle_trigger(void);
+
+/**
+ * Check whether discovery is currently in progress.
+ * Used by OTA to enforce mutual exclusion.
+ */
+bool discovery_is_running(void);

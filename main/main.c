@@ -6,7 +6,8 @@
 #include "driver/twai.h"
 #include "esp_log.h"
 #include "esp_timer.h"
-#include "nvs_flash.h"
+#include "board.h"
+#include "wifi_config.h"
 #include "ota.h"
 #include "discovery.h"
 
@@ -52,6 +53,11 @@ static const gpio_num_t LED_PINS[8] = {
 
 #define CAN_BAUDRATE           500000
 #define TX_PROBE_INTERVAL_MS   2000
+
+// CAN protocol IDs
+#define CAN_ID_OTA              0x00
+#define CAN_ID_WIFI_CONFIG      0x01
+#define CAN_ID_DISCOVERY_TRIGGER 0x02
 
 // CAN IDs computed from build flags (TARGET_DEVICE + DEVICE_INSTANCE)
 #ifndef DEVICE_INSTANCE
@@ -274,10 +280,10 @@ static void twai_task(void *arg)
             while (twai_receive(&msg, 0) == ESP_OK) {
                 if (msg.rtr) continue;
 
-                if (msg.identifier == CAN_ID_OTA_TRIGGER) {
+                if (msg.identifier == CAN_ID_OTA) {
                     ota_handle_trigger(msg.data, msg.data_length_code);
                 } else if (msg.identifier == CAN_ID_WIFI_CONFIG) {
-                    ota_handle_wifi_config(msg.data, msg.data_length_code);
+                    wifi_config_handle_can(msg.data, msg.data_length_code);
                 } else if (msg.identifier == CAN_ID_DISCOVERY_TRIGGER) {
                     discovery_handle_trigger();
                 } else if (msg.identifier == CAN_ID_STATUS) {
@@ -307,12 +313,25 @@ uint32_t tapper_get_status_id(void) { return CAN_ID_STATUS; }
 
 void app_main(void)
 {
-    ota_init();
-    discovery_init();
-
     ESP_LOGI(TAG, "=== TrailCurrent Tapper ===");
     ESP_LOGI(TAG, "8-Button Control Panel with CAN Bus");
-    ESP_LOGI(TAG, "Hostname: %s", ota_get_hostname());
+
+    // Initialize NVS and load WiFi credentials
+    ESP_ERROR_CHECK(wifi_config_init());
+
+    char ssid[33] = {0};
+    char password[64] = {0};
+    if (wifi_config_load(ssid, sizeof(ssid), password, sizeof(password))) {
+        ESP_LOGI(TAG, "WiFi credentials loaded from NVS");
+    } else {
+        ESP_LOGI(TAG, "No WiFi credentials — OTA disabled until provisioned via CAN");
+    }
+
+    // Initialize discovery and OTA (must be after wifi_config_init)
+    discovery_init();
+    ota_init();
+
+    ESP_LOGI(TAG, "Hostname: %s", wifi_config_get_hostname());
     ESP_LOGI(TAG, "Target: %s instance %d (toggle=0x%02X, status=0x%02X)",
              TARGET_DEVICE_NAME, DEVICE_INSTANCE, CAN_ID_TOGGLE, CAN_ID_STATUS);
 

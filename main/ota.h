@@ -6,71 +6,22 @@
 // OTA update window duration (3 minutes)
 #define OTA_TIMEOUT_MS 180000
 
-// CAN message IDs
-#define CAN_ID_OTA_TRIGGER        0x00
-#define CAN_ID_WIFI_CONFIG        0x01
-#define CAN_ID_DISCOVERY_TRIGGER  0x02
-
 /**
- * Initialize NVS and load WiFi credentials if available.
- * Must be called once at startup.
+ * Initialize OTA subsystem.
+ * Must be called after wifi_config_init().
  */
 void ota_init(void);
 
 /**
- * Get the device hostname (esp32-XXYYZZ from last 3 MAC bytes).
- * Valid after ota_init(). Returns pointer to static buffer.
- */
-const char *ota_get_hostname(void);
-
-/**
- * Check whether WiFi credentials have been provisioned.
- */
-bool ota_has_credentials(void);
-
-/**
- * Connect to WiFi using stored credentials.
- * Blocks up to 15 seconds waiting for connection.
- * Returns true if connected, false on failure.
- * Shared by OTA and discovery.
- */
-bool wifi_connect(void);
-
-/**
- * Disconnect from WiFi and stop the radio.
- */
-void wifi_disconnect(void);
-
-/**
  * Handle a CAN OTA trigger message (ID 0x00).
- * Compares MAC bytes in data[0..2] against this device's hostname.
+ * Compares MAC bytes in data[0..2] against this device's MAC.
  * If matched, enters OTA mode: connects WiFi, starts HTTP server,
  * waits for firmware upload or timeout, then disconnects and returns.
  */
 void ota_handle_trigger(const uint8_t *data, uint8_t len);
 
 /**
- * Handle a CAN WiFi config message (ID 0x01).
- * Implements the chunked credential provisioning protocol.
+ * Check whether OTA is currently in progress.
+ * Used by discovery to enforce mutual exclusion.
  */
-void ota_handle_wifi_config(const uint8_t *data, uint8_t len);
-
-/**
- * Get the target device instance (0, 1, or 2).  Set at build time.
- */
-uint8_t tapper_get_device_instance(void);
-
-/**
- * Get the target device type name ("torrent" or "switchback").
- */
-const char *tapper_get_target_device(void);
-
-/**
- * Get the CAN toggle TX ID for the configured target.
- */
-uint32_t tapper_get_toggle_id(void);
-
-/**
- * Get the CAN status RX ID for the configured target.
- */
-uint32_t tapper_get_status_id(void);
+bool ota_is_running(void);
