@@ -2,7 +2,7 @@
 
 ![TrailCurrent Tapper](DOCS/images/tapper_assembled.png)
 
-Eight-button control panel that sends device commands and brightness control over a CAN bus interface with OTA firmware update capability. Part of the [TrailCurrent](https://trailcurrent.com) open-source vehicle platform.
+Eight-button control panel that sends toggle commands over a CAN bus interface with OTA firmware update capability. Supports targeting multiple Torrent module instances. Part of the [TrailCurrent](https://trailcurrent.com) open-source vehicle platform.
 
 ## Hardware Overview
 
@@ -10,8 +10,8 @@ Eight-button control panel that sends device commands and brightness control ove
 - **Function:** Physical button panel for CAN bus device control
 - **Key Features:**
   - 8 momentary buttons with LED backlights
-  - Short press: toggle device on/off
-  - Long press (hold 700ms+): brightness adjustment (0-255)
+  - Button press: toggle device on/off
+  - Configurable Torrent instance targeting (0, 1, or 2)
   - CAN bus communication at 500 kbps
   - Over-the-air (OTA) firmware updates via WiFi
   - mDNS-based network discovery
@@ -103,14 +103,33 @@ idf.py -p /dev/ttyUSB0 flash monitor
 curl -X POST http://esp32-XXYYZZ.local/ota --data-binary @build/tapper.bin
 ```
 
+### Torrent Instance Selection
+
+Each Tapper can target one of three Torrent module instances, which determines which CAN IDs it uses for toggle commands and status feedback. The instance is stored in NVS and persists across reboots.
+
+| Instance | Toggle TX | Status RX |
+|----------|-----------|-----------|
+| 0 (default) | 0x18 | 0x1B |
+| 1 | 0x19 | 0x1C |
+| 2 | 0x1A | 0x1D |
+
+**To change the instance:**
+
+1. Hold **button 8** while powering on / resetting the module
+2. The LED corresponding to the current instance lights up (LED 1 = instance 0, LED 2 = instance 1, LED 3 = instance 2)
+3. Press **button 1**, **2**, or **3** to select instance 0, 1, or 2
+4. The selected LED flashes 3 times to confirm
+5. If no button is pressed within 10 seconds, the existing instance is kept
+
+Multiple Tappers can target the same Torrent instance — there is no limit.
+
 ### CAN Bus Protocol
 
 **Transmit (Panel to Bus):**
 
 | CAN ID | Bytes | Description |
 |--------|-------|-------------|
-| 0x18 | 1 | Button toggle (byte 0 = button index 0-7) |
-| 0x15 | 2 | Brightness control (byte 0 = device index, byte 1 = brightness 0-255) |
+| 0x18-0x1A | 1 | Button toggle (byte 0 = button index 0-7). CAN ID depends on configured Torrent instance. |
 
 **Receive (Bus to Panel):**
 
@@ -119,13 +138,11 @@ curl -X POST http://esp32-XXYYZZ.local/ota --data-binary @build/tapper.bin
 | 0x00 | 3 | OTA update trigger (MAC-based device targeting) |
 | 0x01 | var | WiFi credential provisioning (chunked protocol) |
 | 0x02 | 0 | Discovery trigger (broadcast) |
-| 0x1B | 8 | LED backlight state (1 byte per LED, 0=off, non-zero=on) |
+| 0x1B-0x1D | 8 | LED backlight state (1 byte per LED, 0=off, non-zero=on). CAN ID depends on configured Torrent instance. |
 
 ### Button Behavior
 
-- **Short press** (< 700ms): Sends toggle command on CAN ID 0x18
-- **Long hold** (>= 700ms): Enters brightness mode, incrementing brightness every 100ms and sending on CAN ID 0x15
-- **Release after hold**: Locks brightness at current value
+- **Press**: Sends toggle command (debounced, 50ms). Byte 0 = button index (0-7).
 
 ### OTA Updates
 
@@ -133,7 +150,7 @@ WiFi credentials are provisioned over CAN (ID 0x01) and stored in NVS. When an O
 
 ### Network Discovery
 
-On CAN trigger (ID 0x02), the module joins WiFi and advertises itself via mDNS service `_trailcurrent._tcp` with TXT records for module type, CAN ID, and firmware version.
+On CAN trigger (ID 0x02), the module joins WiFi and advertises itself via mDNS service `_trailcurrent._tcp` with TXT records for module type, CAN ID, Torrent instance, and firmware version.
 
 ## Manufacturing
 

@@ -54,3 +54,19 @@ void ota_handle_trigger(const uint8_t *data, uint8_t len);
  * Implements the chunked credential provisioning protocol.
  */
 void ota_handle_wifi_config(const uint8_t *data, uint8_t len);
+
+/**
+ * Get the currently configured Torrent instance (0, 1, or 2).
+ * Determines which CAN IDs this Tapper uses for toggle/status.
+ */
+uint8_t tapper_get_torrent_instance(void);
+
+/**
+ * Get the CAN toggle TX ID for the current Torrent instance.
+ */
+uint32_t tapper_get_toggle_id(void);
+
+/**
+ * Get the CAN status RX ID for the current Torrent instance.
+ */
+uint32_t tapper_get_status_id(void);

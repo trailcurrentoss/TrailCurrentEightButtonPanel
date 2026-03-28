@@ -6,6 +6,8 @@
 #include "driver/twai.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "nvs_flash.h"
+#include "nvs.h"
 #include "ota.h"
 #include "discovery.h"
 
@@ -52,9 +54,14 @@ static const gpio_num_t LED_PINS[8] = {
 #define CAN_BAUDRATE           500000
 #define TX_PROBE_INTERVAL_MS   2000
 
-// CAN IDs
-#define CAN_ID_TOGGLE       0x18    // Button toggle command (TX)
-#define CAN_ID_LED_STATE    0x1B    // LED state feedback (RX from Torrent)
+// CAN ID base addresses (instance offset added at runtime)
+#define CAN_ID_TOGGLE_BASE    0x18    // Button toggle command (TX)
+#define CAN_ID_STATUS_BASE    0x1B    // LED state feedback (RX from Torrent)
+#define MAX_TORRENT_INSTANCE  2       // 0, 1, or 2
+
+// Runtime CAN IDs (set from NVS-stored instance)
+static uint32_t s_can_id_toggle;
+static uint32_t s_can_id_status;
 
 // =============================================================================
 // Button Timing Constants
@@ -118,16 +125,17 @@ static void gpio_init_all(void)
 static void send_toggle(int button_index)
 {
     twai_message_t msg = {
-        .identifier = CAN_ID_TOGGLE,
+        .identifier = s_can_id_toggle,
         .data_length_code = 1,
         .data = { button_index },
     };
     twai_transmit(&msg, 0);
-    ESP_LOGI(TAG, "Button %d toggle sent", button_index + 1);
+    ESP_LOGI(TAG, "Button %d toggle sent (ID 0x%02lX)", button_index + 1,
+             (unsigned long)s_can_id_toggle);
 }
 
 // =============================================================================
-// LED State Handler (RX from Torrent on CAN ID 0x1B)
+// LED State Handler (RX from Torrent status message)
 // =============================================================================
 
 static void handle_led_state(const uint8_t *data, uint8_t len)
@@ -266,7 +274,7 @@ static void twai_task(void *arg)
                     ota_handle_wifi_config(msg.data, msg.data_length_code);
                 } else if (msg.identifier == CAN_ID_DISCOVERY_TRIGGER) {
                     discovery_handle_trigger();
-                } else if (msg.identifier == CAN_ID_LED_STATE) {
+                } else if (msg.identifier == s_can_id_status) {
                     handle_led_state(msg.data, msg.data_length_code);
                 }
             }
@@ -276,6 +284,96 @@ static void twai_task(void *arg)
         // Button presses are sent from the main task via send_toggle.
         (void)bus_off;
     }
+}
+
+// =============================================================================
+// Torrent Instance Configuration (NVS)
+// =============================================================================
+
+#define NVS_NAMESPACE_TAPPER  "tapper_config"
+#define NVS_KEY_INSTANCE      "torrent_inst"
+
+static uint8_t s_torrent_instance = 0;
+
+uint8_t tapper_get_torrent_instance(void) { return s_torrent_instance; }
+uint32_t tapper_get_toggle_id(void) { return s_can_id_toggle; }
+uint32_t tapper_get_status_id(void) { return s_can_id_status; }
+
+static void load_torrent_instance(void)
+{
+    nvs_handle_t nvs;
+    if (nvs_open(NVS_NAMESPACE_TAPPER, NVS_READONLY, &nvs) == ESP_OK) {
+        nvs_get_u8(nvs, NVS_KEY_INSTANCE, &s_torrent_instance);
+        nvs_close(nvs);
+    }
+    if (s_torrent_instance > MAX_TORRENT_INSTANCE) {
+        s_torrent_instance = 0;
+    }
+    s_can_id_toggle = CAN_ID_TOGGLE_BASE + s_torrent_instance;
+    s_can_id_status = CAN_ID_STATUS_BASE + s_torrent_instance;
+}
+
+static void save_torrent_instance(uint8_t instance)
+{
+    s_torrent_instance = instance;
+    s_can_id_toggle = CAN_ID_TOGGLE_BASE + instance;
+    s_can_id_status = CAN_ID_STATUS_BASE + instance;
+
+    nvs_handle_t nvs;
+    if (nvs_open(NVS_NAMESPACE_TAPPER, NVS_READWRITE, &nvs) == ESP_OK) {
+        nvs_set_u8(nvs, NVS_KEY_INSTANCE, instance);
+        nvs_commit(nvs);
+        nvs_close(nvs);
+    }
+}
+
+static void flash_leds_for_instance(uint8_t instance)
+{
+    // Flash LED (instance+1) three times to indicate selection
+    gpio_num_t led = LED_PINS[instance];
+    for (int i = 0; i < 3; i++) {
+        gpio_set_level(led, 1);
+        vTaskDelay(pdMS_TO_TICKS(150));
+        gpio_set_level(led, 0);
+        vTaskDelay(pdMS_TO_TICKS(150));
+    }
+}
+
+static void instance_config_mode(void)
+{
+    // Show current instance: light up corresponding LED (steady)
+    gpio_set_level(LED_PINS[s_torrent_instance], 1);
+    ESP_LOGI(TAG, "Instance config mode — press button 1/2/3 to select, "
+             "current: %d", s_torrent_instance);
+
+    // Wait for a button press (1, 2, or 3) or timeout after 10 seconds
+    int64_t start = esp_timer_get_time();
+    while ((esp_timer_get_time() - start) < (10 * 1000000LL)) {
+        for (int i = 0; i <= MAX_TORRENT_INSTANCE; i++) {
+            if (gpio_get_level(BUTTON_PINS[i]) == 0) {
+                // Wait for release
+                while (gpio_get_level(BUTTON_PINS[i]) == 0) {
+                    vTaskDelay(pdMS_TO_TICKS(10));
+                }
+                // Turn off current indicator
+                gpio_set_level(LED_PINS[s_torrent_instance], 0);
+
+                save_torrent_instance(i);
+                ESP_LOGI(TAG, "Torrent instance set to %d (toggle=0x%02lX, "
+                         "status=0x%02lX)", i,
+                         (unsigned long)s_can_id_toggle,
+                         (unsigned long)s_can_id_status);
+                flash_leds_for_instance(i);
+                return;
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+
+    // Timeout — keep existing instance
+    gpio_set_level(LED_PINS[s_torrent_instance], 0);
+    ESP_LOGI(TAG, "Instance config timed out, keeping instance %d",
+             s_torrent_instance);
 }
 
 // =============================================================================
@@ -294,8 +392,18 @@ void app_main(void)
     // Initialize GPIO for buttons and LEDs
     gpio_init_all();
 
-    ESP_LOGI(TAG, "CAN toggle TX ID: 0x%02X, LED state RX ID: 0x%02X",
-             CAN_ID_TOGGLE, CAN_ID_LED_STATE);
+    // Load Torrent instance from NVS
+    load_torrent_instance();
+    ESP_LOGI(TAG, "Torrent instance: %d (toggle=0x%02lX, status=0x%02lX)",
+             s_torrent_instance,
+             (unsigned long)s_can_id_toggle,
+             (unsigned long)s_can_id_status);
+
+    // Hold button 8 at boot to enter instance config mode
+    vTaskDelay(pdMS_TO_TICKS(100));  // Let GPIO settle
+    if (gpio_get_level(BUTTON_PINS[7]) == 0) {
+        instance_config_mode();
+    }
 
     // CAN runs in its own task so bus errors never block button scanning
     xTaskCreate(twai_task, "twai", 4096, NULL, 5, NULL);

@@ -21,8 +21,6 @@ static const char *TAG = "discovery";
 #error "MODULE_TYPE must be defined (e.g., \"tapper\")"
 #endif
 
-// CAN TX ID for button toggle messages (primary function of Tapper)
-#define CAN_TOGGLE_ID  0x18
 
 // ---------------------------------------------------------------------------
 // Discovery state
@@ -39,9 +37,13 @@ static void discovery_mdns_start(void)
 {
     const char *hostname = ota_get_hostname();
 
-    // Build CAN ID string
+    // Build CAN ID and instance strings
     char canid_str[8];
-    snprintf(canid_str, sizeof(canid_str), "0x%02X", CAN_TOGGLE_ID);
+    snprintf(canid_str, sizeof(canid_str), "0x%02lX",
+             (unsigned long)tapper_get_toggle_id());
+    char instance_str[4];
+    snprintf(instance_str, sizeof(instance_str), "%d",
+             tapper_get_torrent_instance());
 
     // Get firmware version from app descriptor
     const esp_app_desc_t *app = esp_app_get_description();
@@ -51,9 +53,10 @@ static void discovery_mdns_start(void)
     mdns_instance_name_set("TrailCurrent Module");
 
     mdns_txt_item_t txt[] = {
-        { "type",  MODULE_TYPE },
-        { "canid", canid_str },
-        { "fw",    app->version },
+        { "type",     MODULE_TYPE },
+        { "canid",    canid_str },
+        { "instance", instance_str },
+        { "fw",       app->version },
     };
 
     mdns_service_add("TrailCurrent Discovery", "_trailcurrent", "_tcp",
