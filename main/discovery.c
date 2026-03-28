@@ -43,7 +43,7 @@ static void discovery_mdns_start(void)
              (unsigned long)tapper_get_toggle_id());
     char instance_str[4];
     snprintf(instance_str, sizeof(instance_str), "%d",
-             tapper_get_torrent_instance());
+             tapper_get_device_instance());
 
     // Get firmware version from app descriptor
     const esp_app_desc_t *app = esp_app_get_description();
@@ -54,6 +54,7 @@ static void discovery_mdns_start(void)
 
     mdns_txt_item_t txt[] = {
         { "type",     MODULE_TYPE },
+        { "target",   (char *)tapper_get_target_device() },
         { "canid",    canid_str },
         { "instance", instance_str },
         { "fw",       app->version },

@@ -56,17 +56,21 @@ void ota_handle_trigger(const uint8_t *data, uint8_t len);
 void ota_handle_wifi_config(const uint8_t *data, uint8_t len);
 
 /**
- * Get the currently configured Torrent instance (0, 1, or 2).
- * Determines which CAN IDs this Tapper uses for toggle/status.
+ * Get the target device instance (0, 1, or 2).  Set at build time.
  */
-uint8_t tapper_get_torrent_instance(void);
+uint8_t tapper_get_device_instance(void);
 
 /**
- * Get the CAN toggle TX ID for the current Torrent instance.
+ * Get the target device type name ("torrent" or "switchback").
+ */
+const char *tapper_get_target_device(void);
+
+/**
+ * Get the CAN toggle TX ID for the configured target.
  */
 uint32_t tapper_get_toggle_id(void);
 
 /**
- * Get the CAN status RX ID for the current Torrent instance.
+ * Get the CAN status RX ID for the configured target.
  */
 uint32_t tapper_get_status_id(void);
