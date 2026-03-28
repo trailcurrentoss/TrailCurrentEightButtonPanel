@@ -29,6 +29,7 @@ static const char *TAG = "discovery";
 // ---------------------------------------------------------------------------
 
 static volatile bool s_confirmed = false;
+static volatile bool s_discovery_running = false;
 
 // ---------------------------------------------------------------------------
 // mDNS service advertisement with TXT records
@@ -103,10 +104,12 @@ void discovery_init(void)
     ESP_LOGI(TAG, "Discovery ready — will respond to CAN 0x02 trigger");
 }
 
-void discovery_handle_trigger(void)
+static void discovery_task_fn(void *arg)
 {
     if (!ota_has_credentials()) {
         ESP_LOGE(TAG, "Discovery triggered but no WiFi credentials — cannot respond");
+        s_discovery_running = false;
+        vTaskDelete(NULL);
         return;
     }
 
@@ -114,6 +117,8 @@ void discovery_handle_trigger(void)
 
     if (!wifi_connect()) {
         ESP_LOGE(TAG, "WiFi connection failed — aborting discovery");
+        s_discovery_running = false;
+        vTaskDelete(NULL);
         return;
     }
     discovery_mdns_start();
@@ -144,4 +149,17 @@ void discovery_handle_trigger(void)
     } else {
         ESP_LOGI(TAG, "=== Discovery timed out — will respond to next trigger ===");
     }
+
+    s_discovery_running = false;
+    vTaskDelete(NULL);
+}
+
+void discovery_handle_trigger(void)
+{
+    if (s_discovery_running) {
+        ESP_LOGW(TAG, "Discovery already in progress — ignoring trigger");
+        return;
+    }
+    s_discovery_running = true;
+    xTaskCreate(discovery_task_fn, "discovery", 8192, NULL, 3, NULL);
 }
