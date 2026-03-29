@@ -38,15 +38,10 @@ static void discovery_mdns_start(void)
 {
     const char *hostname = wifi_config_get_hostname();
 
-    // Build CAN ID and instance strings
-    char canid_str[8];
-    snprintf(canid_str, sizeof(canid_str), "0x%02lX",
-             (unsigned long)tapper_get_toggle_id());
     char instance_str[4];
     snprintf(instance_str, sizeof(instance_str), "%d",
              tapper_get_device_instance());
 
-    // Get firmware version from app descriptor
     const esp_app_desc_t *app = esp_app_get_description();
 
     mdns_init();
@@ -56,7 +51,6 @@ static void discovery_mdns_start(void)
     mdns_txt_item_t txt[] = {
         { "type",     MODULE_TYPE },
         { "target",   (char *)tapper_get_target_device() },
-        { "canid",    canid_str },
         { "instance", instance_str },
         { "fw",       app->version },
     };
@@ -64,8 +58,8 @@ static void discovery_mdns_start(void)
     mdns_service_add("TrailCurrent Discovery", "_trailcurrent", "_tcp",
                      80, txt, sizeof(txt) / sizeof(txt[0]));
 
-    ESP_LOGI(TAG, "mDNS discovery: %s.local type=%s canid=%s fw=%s",
-             hostname, MODULE_TYPE, canid_str, app->version);
+    ESP_LOGI(TAG, "mDNS discovery: %s.local type=%s fw=%s",
+             hostname, MODULE_TYPE, app->version);
 }
 
 // ---------------------------------------------------------------------------

@@ -6,6 +6,8 @@
 #include "driver/twai.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_app_desc.h"
+#include "esp_mac.h"
 #include "board.h"
 #include "wifi_config.h"
 #include "ota.h"
@@ -214,6 +216,22 @@ static void twai_task(void *arg)
         ESP_LOGE(TAG, "Failed to start TWAI driver");
         vTaskDelete(NULL);
         return;
+    }
+
+    // Broadcast firmware version on CAN 0x04 at startup
+    {
+        uint8_t mac[6];
+        esp_read_mac(mac, ESP_MAC_WIFI_STA);
+        const esp_app_desc_t *app = esp_app_get_description();
+        unsigned maj = 0, min = 0, pat = 0;
+        sscanf(app->version, "%u.%u.%u", &maj, &min, &pat);
+        twai_message_t ver_msg = {
+            .identifier = 0x04,
+            .data_length_code = 6,
+            .data = { mac[3], mac[4], mac[5], maj, min, pat }
+        };
+        twai_transmit(&ver_msg, pdMS_TO_TICKS(50));
+        ESP_LOGI(TAG, "Version broadcast: %s (CAN 0x04)", app->version);
     }
 
     uint32_t alerts = TWAI_ALERT_RX_DATA | TWAI_ALERT_ERR_PASS |
