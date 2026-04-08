@@ -153,6 +153,7 @@ Multiple Tappers can target the same device instance — there is no limit.
 | 0x00 | 3 | OTA update trigger (MAC-based device targeting) |
 | 0x01 | var | WiFi credential provisioning (chunked protocol) |
 | 0x02 | 0 | Discovery trigger (broadcast) |
+| 0x04 | 6 | Version report on boot: `[mac3, mac4, mac5, major, minor, patch]` |
 | Torrent: 0x1B-0x1D | 8 | LED state (1 byte per channel, 0=off, non-zero=on) |
 | Switchback: 0x28-0x2A | 1 | LED state (bitmask, 1 bit per relay) |
 
