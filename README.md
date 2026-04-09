@@ -102,8 +102,8 @@ idf.py build -DTARGET_DEVICE=switchback -DDEVICE_INSTANCE=2
 # Flash via serial
 idf.py -p /dev/ttyUSB0 flash monitor
 
-# OTA update (after initial flash, with WiFi credentials provisioned)
-curl -X POST http://esp32-XXYYZZ.local/ota --data-binary @build/tapper.bin
+# OTA update (use the binary matching the module's target and address)
+curl -X POST http://esp32-XXYYZZ.local/ota --data-binary @build/tapper_torrent_addr0.bin
 ```
 
 ### Target Device Configuration
@@ -136,6 +136,47 @@ These flags determine the CAN IDs used for toggle commands and status feedback:
 When switching between device types, run `idf.py fullclean` before rebuilding to clear cached CMake variables.
 
 Multiple Tappers can target the same device instance — there is no limit.
+
+#### Building All Variants
+
+Use `build-all.sh` to build all 6 firmware variants (2 targets x 3 addresses):
+
+```bash
+./build-all.sh
+```
+
+This produces:
+
+```
+build/tapper_torrent_addr0.bin      # Torrent, Address 0
+build/tapper_torrent_addr1.bin      # Torrent, Address 1
+build/tapper_torrent_addr2.bin      # Torrent, Address 2
+build/tapper_switchback_addr0.bin   # Switchback, Address 0
+build/tapper_switchback_addr1.bin   # Switchback, Address 1
+build/tapper_switchback_addr2.bin   # Switchback, Address 2
+```
+
+#### Creating a GitHub Release
+
+After building all variants, upload all 6 binaries as release assets:
+
+```bash
+git tag -a v1.0.0 -m "Firmware release v1.0.0"
+git push origin v1.0.0
+
+gh release create v1.0.0 \
+  build/tapper_torrent_addr0.bin \
+  build/tapper_torrent_addr1.bin \
+  build/tapper_torrent_addr2.bin \
+  build/tapper_switchback_addr0.bin \
+  build/tapper_switchback_addr1.bin \
+  build/tapper_switchback_addr2.bin \
+  --repo trailcurrentoss/TrailCurrentTapper \
+  --title "v1.0.0" \
+  --notes "Firmware release v1.0.0"
+```
+
+The naming convention `tapper_{target}_addr{N}.bin` is required — the Headwaters deployment system and the web-based firmware installer both depend on it.
 
 ### CAN Bus Protocol
 
@@ -192,6 +233,7 @@ On CAN trigger (ID 0x02), the module joins WiFi and advertises itself via mDNS s
 │   └── idf_component.yml         # Managed component dependencies
 ├── CMakeLists.txt                # ESP-IDF project root
 ├── sdkconfig.defaults            # Default SDK configuration
+├── build-all.sh                  # Build all 6 variants (2 targets x 3 addresses)
 └── partitions.csv                # ESP32 flash partition layout (dual OTA)
 ```
 
