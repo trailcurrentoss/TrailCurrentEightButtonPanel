@@ -1,6 +1,6 @@
 idf_component_register(SRCS "main.c" "ota.c" "discovery.c" "wifi_config.c"
                   INCLUDE_DIRS "."
-                  REQUIRES driver esp_timer nvs_flash esp_wifi esp_netif esp_http_server esp_app_format app_update)
+                  REQUIRES driver esp_timer nvs_flash esp_wifi esp_netif esp_http_server esp_app_format app_update can_common)
 
 # -------------------------------------------------------------------------
 # Build flags: TARGET_DEVICE (torrent|switchback) and DEVICE_INSTANCE (0-2)
